@@ -53,6 +53,21 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while (doc_tokenizer.hasMoreTokens()) {
+				String currentWord = doc_tokenizer.nextToken().toLowerCase();
+				if (word_set.containsKey(currentWord)) {
+					// 如果单词已经存在于 HashMap 中，将其计数加 1
+					int count = word_set.get(currentWord);
+					word_set.put(currentWord, count + 1);
+				} else {
+					// 如果单词不存在于 HashMap 中，将其计数初始化为 1
+					word_set.put(currentWord, 1);
+				}
+			}
+
+			for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+				context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+			}
 		}
 	}
 
@@ -66,6 +81,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable value : values) {
+				sum += value.get();  // 累加每个文档中的该词频次
+			}
+			context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -74,6 +94,8 @@ public class CORPairs extends Configured implements Tool {
 	 * TODO: Write your second-pass Mapper here.
 	 */
 	public static class CORPairsMapper2 extends Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
+		private static final PairOfStrings pair = new PairOfStrings();
+		private static final IntWritable ONE = new IntWritable(1);
 		@Override
 		protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			// Please use this tokenizer! DO NOT implement a tokenizer by yourself!
@@ -81,6 +103,25 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			Set<String> uniqueWords = new HashSet<String>();
+
+			while (doc_tokenizer.hasMoreTokens()) {
+				uniqueWords.add(doc_tokenizer.nextToken().toLowerCase());
+			}
+
+			List<String> wordList = new ArrayList<String>(uniqueWords);
+			for (int i = 0; i < wordList.size(); i++) {
+				for (int j = i + 1; j < wordList.size(); j++) {
+					String w1 = wordList.get(i);
+					String w2 = wordList.get(j);
+					if (w1.compareTo(w2) < 0) {
+						pair.set(w1, w2);
+					} else {
+						pair.set(w2, w1);
+					}
+					context.write(pair, ONE);
+				}
+			}
 		}
 	}
 
@@ -93,6 +134,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable val : values) {
+				sum += val.get();
+			}
+			context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -145,6 +191,24 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			String w1 = key.getLeftElement();
+			String w2 = key.getRightElement();
+
+			int bigramCount = 0;
+			for (IntWritable val : values) {
+				bigramCount += val.get();
+			}
+
+			Integer totalCountW1 = word_total_map.get(w1);
+			Integer totalCountW2 = word_total_map.get(w2);
+
+			if (totalCountW1 == null || totalCountW1 == 0 || totalCountW2 == null || totalCountW2 == 0) {
+				// 避免除以 0 或 map 中没有这个词
+				return;
+			}
+
+			double conditionalProb = (double) bigramCount / Math.min(totalCountW1, totalCountW2);
+			context.write(key, new DoubleWritable(conditionalProb));
 		}
 	}
 

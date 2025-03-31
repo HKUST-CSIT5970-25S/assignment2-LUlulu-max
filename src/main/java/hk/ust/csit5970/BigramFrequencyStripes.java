@@ -54,6 +54,19 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			if (words.length > 1) {
+				for (int i = 0; i < words.length - 1; i++) {
+					String w1 = words[i];
+					String w2 = words[i + 1];
+
+					if (w1.length() == 0 || w2.length() == 0) continue;
+
+					KEY.set(w1);
+					HashMapStringIntWritable stripe = new HashMapStringIntWritable();
+					STRIPE.increment(w2);  // 类似 map.put(w2, 1) 或累加操作
+					context.write(KEY, STRIPE);
+				}
+			}
 		}
 	}
 
@@ -75,6 +88,36 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			SUM_STRIPES.clear();
+			// 合并所有条纹
+			for (HashMapStringIntWritable stripe : stripes) {
+				SUM_STRIPES.plus(stripe);
+			}
+
+			// 手动计算总计数
+			int totalCount = 0;
+			for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+				totalCount += entry.getValue();
+			}
+
+			// 输出单词本身的总计数，用空字符串作为后继词标识
+			if(totalCount > 0){
+				BIGRAM.set(key.toString(), "");
+				FREQ.set(totalCount);
+				context.write(BIGRAM, FREQ);
+
+				// 遍历每个后继词及其计数，计算条件概率并输出
+				for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+					String neighbor = entry.getKey();
+					int count = entry.getValue();
+					float relativeFreq = (float) count / totalCount;
+
+					BIGRAM.set(key.toString(), neighbor);
+					FREQ.set(relativeFreq);
+					context.write(BIGRAM, FREQ);
+				}
+			}
+
 		}
 	}
 
@@ -94,6 +137,12 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			SUM_STRIPES.clear();
+			for (HashMapStringIntWritable stripe : stripes) {
+				SUM_STRIPES.plus(stripe);  // 合并每个 stripe 的键值对
+			}
+
+			context.write(key, SUM_STRIPES);
 		}
 	}
 

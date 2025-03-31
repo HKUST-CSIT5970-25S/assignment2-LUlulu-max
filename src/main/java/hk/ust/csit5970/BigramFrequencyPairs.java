@@ -53,6 +53,21 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			if (words.length > 1) {
+				for (int i = 0; i < words.length - 1; i++) {
+					String w1 = words[i];
+					String w2 = words[i + 1];
+					if (w1.length() == 0 || w2.length() == 0) continue;
+
+					// Emit bigram (w1, w2)
+					BIGRAM.set(w1, w2);
+					context.write(BIGRAM, ONE);
+
+					// Emit marginal count (w1, *)
+					BIGRAM.set(w1, "");
+					context.write(BIGRAM, ONE);
+				}
+			}
 		}
 	}
 
@@ -64,6 +79,8 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
+		private IntWritable totalCount = new IntWritable();
+
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -71,6 +88,24 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable val : values) {
+				sum += val.get();
+			}
+			if ("".equals(key.getRightElement())) {
+				// 如果右侧元素为空字符串，将总和赋值给 totalCount 对象
+				totalCount.set(sum);
+				// 同时将总和转换为 float 类型后赋值给 VALUE 对象
+				VALUE.set((float) sum);
+			} else {
+				// 如果右侧元素不为空字符串，计算当前总和与 totalCount 的比值
+				float ratio = (float) sum / totalCount.get();
+				// 将计算得到的比值赋值给 VALUE 对象
+				VALUE.set(ratio);
+			}
+
+			// 将二元组（key）和计算得到的值（VALUE）作为键值对输出
+			context.write(key, VALUE);
 		}
 	}
 	
@@ -84,6 +119,12 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable val : values) {
+				sum += val.get();
+			}
+			SUM.set(sum);
+			context.write(key, SUM);
 		}
 	}
 
