@@ -117,6 +117,7 @@ public class CORStripes extends Configured implements Tool {
 	/*
 	 * TODO: Write your second-pass Combiner here.
 	 */
+
 	public static class CORStripesCombiner2 extends Reducer<Text, MapWritable, Text, MapWritable> {
 		static IntWritable ZERO = new IntWritable(0);
 

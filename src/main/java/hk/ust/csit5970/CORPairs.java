@@ -194,6 +194,7 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
 			double cnt_AB = 0;
 			Iterator<IntWritable> iter = values.iterator();
 
