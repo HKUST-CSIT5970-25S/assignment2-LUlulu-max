@@ -56,11 +56,11 @@ public class CORPairs extends Configured implements Tool {
 			while (doc_tokenizer.hasMoreTokens()) {
 				String currentWord = doc_tokenizer.nextToken().toLowerCase();
 				if (word_set.containsKey(currentWord)) {
-					// 如果单词已经存在于 HashMap 中，将其计数加 1
+
 					int count = word_set.get(currentWord);
 					word_set.put(currentWord, count + 1);
 				} else {
-					// 如果单词不存在于 HashMap 中，将其计数初始化为 1
+
 					word_set.put(currentWord, 1);
 				}
 			}
@@ -83,7 +83,7 @@ public class CORPairs extends Configured implements Tool {
 			 */
 			int sum = 0;
 			for (IntWritable value : values) {
-				sum += value.get();  // 累加每个文档中的该词频次
+				sum += value.get();
 			}
 			context.write(key, new IntWritable(sum));
 		}
@@ -96,6 +96,7 @@ public class CORPairs extends Configured implements Tool {
 	public static class CORPairsMapper2 extends Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
 		private static final PairOfStrings pair = new PairOfStrings();
 		private static final IntWritable ONE = new IntWritable(1);
+		private static final PairOfStrings BIGRAM = new PairOfStrings();
 		@Override
 		protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			// Please use this tokenizer! DO NOT implement a tokenizer by yourself!
@@ -103,24 +104,19 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			Set<String> uniqueWords = new HashSet<String>();
-
-			while (doc_tokenizer.hasMoreTokens()) {
-				uniqueWords.add(doc_tokenizer.nextToken().toLowerCase());
+			if (!doc_tokenizer.hasMoreTokens()) {
+				return;
 			}
-
-			List<String> wordList = new ArrayList<String>(uniqueWords);
-			for (int i = 0; i < wordList.size(); i++) {
-				for (int j = i + 1; j < wordList.size(); j++) {
-					String w1 = wordList.get(i);
-					String w2 = wordList.get(j);
-					if (w1.compareTo(w2) < 0) {
-						pair.set(w1, w2);
-					} else {
-						pair.set(w2, w1);
-					}
-					context.write(pair, ONE);
+			String previous_word = doc_tokenizer.nextToken();
+			while (doc_tokenizer.hasMoreTokens()) {
+				String word = doc_tokenizer.nextToken();
+				if (previous_word.compareTo(word) < 0) {
+					BIGRAM.set(previous_word, word);
+				} else {
+					BIGRAM.set(word, previous_word);
 				}
+				context.write(BIGRAM, ONE);
+				previous_word = word;
 			}
 		}
 	}
@@ -129,16 +125,22 @@ public class CORPairs extends Configured implements Tool {
 	 * TODO: Write your second-pass Combiner here.
 	 */
 	private static class CORPairsCombiner2 extends Reducer<PairOfStrings, IntWritable, PairOfStrings, IntWritable> {
+		private static final IntWritable SUM = new IntWritable();
 		@Override
 		protected void reduce(PairOfStrings key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			int sum = 0;
-			for (IntWritable val : values) {
-				sum += val.get();
+			Iterator<IntWritable> iter = values.iterator();
+			if (!iter.hasNext()) {
+				return;
 			}
-			context.write(key, new IntWritable(sum));
+			int sum = 0;
+			while (iter.hasNext()) {
+				sum += iter.next().get();
+			}
+			SUM.set(sum);
+			context.write(key, SUM);
 		}
 	}
 
@@ -147,6 +149,7 @@ public class CORPairs extends Configured implements Tool {
 	 */
 	public static class CORPairsReducer2 extends Reducer<PairOfStrings, IntWritable, PairOfStrings, DoubleWritable> {
 		private final static Map<String, Integer> word_total_map = new HashMap<String, Integer>();
+		private static DoubleWritable COR = new DoubleWritable();
 
 		/*
 		 * Preload the middle result file.
@@ -191,24 +194,26 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			String w1 = key.getLeftElement();
-			String w2 = key.getRightElement();
+			double cnt_AB = 0;
+			Iterator<IntWritable> iter = values.iterator();
 
-			int bigramCount = 0;
-			for (IntWritable val : values) {
-				bigramCount += val.get();
+			while (iter.hasNext()) {
+				cnt_AB += iter.next().get();
 			}
 
-			Integer totalCountW1 = word_total_map.get(w1);
-			Integer totalCountW2 = word_total_map.get(w2);
-
-			if (totalCountW1 == null || totalCountW1 == 0 || totalCountW2 == null || totalCountW2 == 0) {
-				// 避免除以 0 或 map 中没有这个词
+			String A = key.getLeftElement();
+			if (!word_total_map.containsKey(A)) {
 				return;
 			}
 
-			double conditionalProb = (double) bigramCount / Math.min(totalCountW1, totalCountW2);
-			context.write(key, new DoubleWritable(conditionalProb));
+			String B = key.getRightElement();
+			if (!word_total_map.containsKey(B)) {
+				return;
+			}
+
+			double cor = cnt_AB / (word_total_map.get(A) * word_total_map.get(B));
+			COR.set(cor);
+			context.write(key, COR);
 		}
 	}
 

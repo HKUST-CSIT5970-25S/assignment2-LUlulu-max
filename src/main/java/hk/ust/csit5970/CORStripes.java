@@ -93,20 +93,23 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			Set<String> processedPairs = new HashSet<String>();
+
 			for (String w1 : sorted_word_set) {
 				MapWritable stripe = new MapWritable();
 				for (String w2 : sorted_word_set) {
 					if (!w1.equals(w2)) {
-						Text neighbor = new Text(w2);
-						if (stripe.containsKey(neighbor)) {
-							IntWritable count = (IntWritable) stripe.get(neighbor);
-							count.set(count.get() + 1);
-						} else {
+						String pairKey = w1.compareTo(w2) < 0 ? w1 + "-" + w2 : w2 + "-" + w1;
+						if (!processedPairs.contains(pairKey)) {
+							Text neighbor = new Text(w2);
 							stripe.put(neighbor, new IntWritable(1));
+							processedPairs.add(pairKey);
 						}
 					}
 				}
-				context.write(new Text(w1), stripe);  // 输出：<w1, stripe>
+				if (!stripe.isEmpty()) {
+					context.write(new Text(w1), stripe);
+				}
 			}
 		}
 	}
@@ -194,7 +197,6 @@ public class CORStripes extends Configured implements Tool {
 			 */
 			MapWritable mergedStripe = new MapWritable();
 
-			// 合并所有 stripe
 			for (MapWritable stripe : values) {
 				for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
 					Text neighbor = (Text) entry.getKey();
@@ -209,24 +211,26 @@ public class CORStripes extends Configured implements Tool {
 				}
 			}
 
-			// 获取当前词 A 的频率 Freq(A)
 			String wordA = key.toString();
-			Integer totalCount = word_total_map.get(wordA);
+			Integer totalCountA = word_total_map.get(wordA);
 
-			if (totalCount == null || totalCount == 0) {
-				// 🔒 安全防护：避免除以零或未找到的情况
+			if (totalCountA == null || totalCountA == 0) {
 				return;
 			}
 
-			// 计算 P(B|A)
 			for (Map.Entry<Writable, Writable> entry : mergedStripe.entrySet()) {
 				String wordB = entry.getKey().toString();
+				Integer totalCountB = word_total_map.get(wordB);
+
+				if (totalCountB == null || totalCountB == 0) {
+					continue;
+				}
+
 				int countAB = ((IntWritable) entry.getValue()).get();
-				double prob = (double) countAB / totalCount;
+				double cor = (double) countAB / (totalCountA * totalCountB);
 
-				context.write(new PairOfStrings(wordA, wordB), new DoubleWritable(prob));
+				context.write(new PairOfStrings(wordA, wordB), new DoubleWritable(cor));
 			}
-
 		}
 	}
 
