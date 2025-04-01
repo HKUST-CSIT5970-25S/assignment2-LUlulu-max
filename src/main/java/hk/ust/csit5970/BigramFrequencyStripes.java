@@ -63,8 +63,9 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 
 					KEY.set(w1);
 					HashMapStringIntWritable stripe = new HashMapStringIntWritable();
-					STRIPE.increment(w2);  // 类似 map.put(w2, 1) 或累加操作
+					STRIPE.increment(w2);
 					context.write(KEY, STRIPE);
+					STRIPE.clear();
 				}
 			}
 		}
@@ -80,6 +81,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
 		private final static PairOfStrings BIGRAM = new PairOfStrings();
 		private final static FloatWritable FREQ = new FloatWritable();
+		private  static float cur_left_cnt=0.0f;
 
 		@Override
 		public void reduce(Text key,
@@ -88,35 +90,45 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			SUM_STRIPES.clear();
-			// 合并所有条纹
+
 			for (HashMapStringIntWritable stripe : stripes) {
 				SUM_STRIPES.plus(stripe);
 			}
 
-			// 手动计算总计数
 			int totalCount = 0;
 			for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
 				totalCount += entry.getValue();
 			}
 
-			// 输出单词本身的总计数，用空字符串作为后继词标识
-			if(totalCount > 0){
-				BIGRAM.set(key.toString(), "");
-				FREQ.set(totalCount);
-				context.write(BIGRAM, FREQ);
-
-				// 遍历每个后继词及其计数，计算条件概率并输出
-				for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
-					String neighbor = entry.getKey();
-					int count = entry.getValue();
-					float relativeFreq = (float) count / totalCount;
-
-					BIGRAM.set(key.toString(), neighbor);
-					FREQ.set(relativeFreq);
+			// 遍历 SUM_STRIPES 中的所有键（即第二个单词）
+			for (String second_word : SUM_STRIPES.keySet()) {
+				// 检查第二个单词是否为空字符串
+				if (second_word.length() ==0) {
+					// 当第二个单词为空时
+					// 获取键为空字符串时对应的值，即当前左词的计数
+					cur_left_cnt = SUM_STRIPES.get("");
+					// 将频率设置为当前左词的计数
+					FREQ.set(cur_left_cnt);
+					// 设置二元组，第一个元素为 key 的字符串表示，第二个元素为空字符串
+					// 注意：这里可能需要根据实际情况使用 \t 来分隔第二个单词
+					BIGRAM.set(key.toString(), "");
+					// 将二元组和对应的频率写入上下文
 					context.write(BIGRAM, FREQ);
+					// 跳过本次循环的后续操作，继续下一次循环
+					continue;
 				}
+
+				// 当第二个单词不为空时
+				// 计算当前二元组的频率，即第二个单词的计数除以当前左词的计数
+				FREQ.set((float) SUM_STRIPES.get(second_word) / cur_left_cnt);
+				// 设置二元组，第一个元素为 key 的字符串表示，第二个元素为当前第二个单词
+				BIGRAM.set(key.toString(), second_word);
+				// 将二元组和对应的频率写入上下文
+				context.write(BIGRAM, FREQ);
 			}
+
+// 清空 SUM_STRIPES 集合，释放内存
+			SUM_STRIPES.clear();
 
 		}
 	}
@@ -137,12 +149,11 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			SUM_STRIPES.clear();
-			for (HashMapStringIntWritable stripe : stripes) {
-				SUM_STRIPES.plus(stripe);  // 合并每个 stripe 的键值对
+			for(HashMapStringIntWritable stripe : stripes){
+				SUM_STRIPES.plus(stripe);
 			}
-
 			context.write(key, SUM_STRIPES);
+			SUM_STRIPES.clear();
 		}
 	}
 

@@ -93,18 +93,13 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 				sum += val.get();
 			}
 			if ("".equals(key.getRightElement())) {
-				// 如果右侧元素为空字符串，将总和赋值给 totalCount 对象
 				totalCount.set(sum);
-				// 同时将总和转换为 float 类型后赋值给 VALUE 对象
 				VALUE.set((float) sum);
 			} else {
-				// 如果右侧元素不为空字符串，计算当前总和与 totalCount 的比值
 				float ratio = (float) sum / totalCount.get();
-				// 将计算得到的比值赋值给 VALUE 对象
 				VALUE.set(ratio);
 			}
 
-			// 将二元组（key）和计算得到的值（VALUE）作为键值对输出
 			context.write(key, VALUE);
 		}
 	}
